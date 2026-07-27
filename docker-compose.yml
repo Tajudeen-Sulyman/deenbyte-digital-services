@@ -1,0 +1,65 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: deenbyte_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: deenbyte
+      POSTGRES_PASSWORD: deenbyte_pass
+      POSTGRES_DB: deenbyte_db
+    volumes:
+      - deenbyte_pgdata:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U deenbyte']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: deenbyte_backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://deenbyte:deenbyte_pass@postgres:5432/deenbyte_db?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '5000:5000'
+    volumes:
+      - deenbyte_uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /api
+    container_name: deenbyte_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '4173:80'
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: deenbyte_nginx
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    volumes:
+      - ./nginx/reverse-proxy.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - '80:80'
+
+volumes:
+  deenbyte_pgdata:
+  deenbyte_uploads:

@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  CUSTOMER
+}
+
+enum TransactionType {
+  CREDIT
+  DEBIT
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REVERSED
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum ServiceCategory {
+  AIRTIME
+  DATA
+  ELECTRICITY
+  CABLE_TV
+  NIN_VERIFICATION
+  BVN_VERIFICATION
+  CAC_REGISTRATION
+  WAEC_PIN
+  NECO_PIN
+  JAMB
+  WALLET_FUNDING
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  phone             String?   @unique
+  passwordHash      String
+  role              Role      @default(CUSTOMER)
+  isEmailVerified   Boolean   @default(false)
+  isActive          Boolean   @default(true)
+
+  emailVerifyToken       String?
+  emailVerifyExpires     DateTime?
+  passwordResetToken     String?
+  passwordResetExpires   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile        Profile?
+  wallet         Wallet?
+  transactions   Transaction[]
+  orders         Order[]
+  notifications  Notification[]
+  refreshTokens  RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  token      String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  revoked    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Profile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName   String?
+  lastName    String?
+  avatarUrl   String?
+  address     String?
+  city        String?
+  state       String?
+  country     String?  @default("Nigeria")
+  dateOfBirth DateTime?
+  gender      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("profiles")
+}
+
+model Wallet {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance       Decimal  @default(0) @db.Decimal(14, 2)
+  currency      String   @default("NGN")
+  isLocked      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  transactions  Transaction[]
+
+  @@map("wallets")
+}
+
+model Transaction {
+  id              String            @id @default(uuid())
+  reference       String            @unique
+  userId          String
+  user            User              @relation(fields: [userId], references: [id])
+  walletId        String
+  wallet          Wallet            @relation(fields: [walletId], references: [id])
+  type            TransactionType
+  status          TransactionStatus @default(PENDING)
+  amount          Decimal           @db.Decimal(14, 2)
+  balanceBefore   Decimal           @db.Decimal(14, 2)
+  balanceAfter    Decimal           @db.Decimal(14, 2)
+  description     String?
+  provider        String?
+  providerRef     String?
+  orderId         String?           @unique
+  order           Order?            @relation(fields: [orderId], references: [id])
+  metadata        Json?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([reference])
+  @@map("transactions")
+}
+
+model Service {
+  id            String          @id @default(uuid())
+  code          String          @unique
+  name          String
+  category      ServiceCategory
+  provider      String
+  isActive      Boolean         @default(true)
+  feeFlat       Decimal         @default(0) @db.Decimal(14, 2)
+  feePercent    Decimal         @default(0) @db.Decimal(5, 2)
+  minAmount     Decimal?        @db.Decimal(14, 2)
+  maxAmount     Decimal?        @db.Decimal(14, 2)
+  fieldsSchema  Json
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  orders        Order[]
+
+  @@map("services")
+}
+
+model Order {
+  id              String       @id @default(uuid())
+  reference       String       @unique
+  userId          String
+  user            User         @relation(fields: [userId], references: [id])
+  serviceId       String
+  service         Service      @relation(fields: [serviceId], references: [id])
+  status          OrderStatus  @default(PENDING)
+  amount          Decimal      @db.Decimal(14, 2)
+  fee             Decimal      @default(0) @db.Decimal(14, 2)
+  totalAmount     Decimal      @db.Decimal(14, 2)
+  inputPayload    Json
+  providerResponse Json?
+  providerRef     String?
+  token           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  transaction     Transaction?
+
+  @@index([userId])
+  @@map("orders")
+}
+
+model Notification {
+  id        String            @id @default(uuid())
+  userId    String?
+  user      User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      NotificationType  @default(INFO)
+  isRead    Boolean           @default(false)
+  isBroadcast Boolean         @default(false)
+  createdAt DateTime          @default(now())
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
